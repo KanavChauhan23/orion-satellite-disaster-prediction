@@ -1,60 +1,55 @@
 """
-AI-Driven Satellite Swarm — Backend API
-========================================
-Flask REST API connecting the AI disaster prediction model
-to the frontend dashboard.
+ORION — Backend API (Patent Edition)
+======================================
+Includes all 3 novel patent algorithm endpoints:
 
-Endpoints:
-  GET  /                      → Project info
-  GET  /api/status            → System health
-  GET  /api/satellites        → Live satellite positions
-  POST /api/predict           → Predict disaster for given features
-  GET  /api/scan              → Trigger a global scan
-  GET  /api/alerts            → Recent alert history
-  GET  /api/region/<lat>/<lon>→ Scan a specific region
-  GET  /api/stats             → Prediction statistics
-  GET  /api/history           → 7-day alert history
+  POST /api/cascade          → CLAIM 1: Cascade disaster prediction
+  POST /api/tewi             → CLAIM 2: Temporal Early Warning Index
+  POST /api/dspr             → CLAIM 3: Dynamic Swarm Priority Reassignment
+  POST /api/patent/analysis  → All 3 claims in one unified call
 """
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import random
-import math
-import json
-import time
-import os
+import random, math, time, os, sys, json
 from datetime import datetime, timedelta
-import sys
 
-# add models folder to path so we can import disaster_predictor
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'models'))
 
-app = Flask(__name__)
-CORS(app)  # allow frontend (Vercel) to call this API
+app  = Flask(__name__)
+CORS(app)
 
-# ── Lazy-load the AI model ─────────────────────────────────────────────────
-_swarm = None
+# ── Lazy-load models ──────────────────────────────────────────────
+_swarm         = None
+_patent_engine = None
 
 def get_swarm():
     global _swarm
     if _swarm is None:
         try:
             from disaster_predictor import SatelliteSwarm
-            print("⏳ Initialising satellite swarm + training AI model...")
+            print("⏳ Training AI model...")
             _swarm = SatelliteSwarm(n_satellites=6)
-            print("✅ Swarm ready.")
+            print("✅ Model ready.")
         except Exception as e:
             print(f"⚠️  Model load failed: {e}")
-            _swarm = None
     return _swarm
 
+def get_patent_engine():
+    global _patent_engine
+    if _patent_engine is None:
+        try:
+            from patent_algorithms import ORIONPatentEngine
+            _patent_engine = ORIONPatentEngine(n_satellites=6)
+            print("✅ Patent engine ready.")
+        except Exception as e:
+            print(f"⚠️  Patent engine load failed: {e}")
+    return _patent_engine
 
-# ── In-memory alert store ──────────────────────────────────────────────────
+# ── Alert store ───────────────────────────────────────────────────
 _alert_history = []
-_MAX_ALERTS    = 100
 
 def _store_alert(scan_result):
-    """Save non-trivial predictions to in-memory history."""
     p = scan_result["prediction"]
     if p["prediction"] != "No Threat":
         _alert_history.append({
@@ -67,21 +62,27 @@ def _store_alert(scan_result):
             "lon":          scan_result["region"]["lon"],
             "timestamp":    p["timestamp"],
         })
-        if len(_alert_history) > _MAX_ALERTS:
+        if len(_alert_history) > 100:
             _alert_history.pop(0)
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# EXISTING ROUTES
+# ════════════════════════════════════════════════════════════════
 
 @app.route("/")
 def home():
-    """Root route — confirms API is alive."""
     return jsonify({
         "project":     "ORION — AI-Driven Satellite Swarm",
-        "version":     "1.0.0",
+        "version":     "2.0.0-patent",
         "status":      "running",
-        "description": "Autonomous Disaster Prediction System",
-        "endpoints": {
+        "patent_claims": {
+            "claim_1": "Cascade Disaster Prediction  →  POST /api/cascade",
+            "claim_2": "Temporal Early Warning Index →  POST /api/tewi",
+            "claim_3": "Dynamic Swarm Priority       →  POST /api/dspr",
+            "unified": "All 3 claims combined        →  POST /api/patent/analysis",
+        },
+        "standard_endpoints": {
             "status":     "/api/status",
             "satellites": "/api/satellites",
             "predict":    "/api/predict  [POST]",
@@ -95,14 +96,13 @@ def home():
 
 @app.route("/api/status")
 def status():
-    """System health check."""
     swarm = get_swarm()
     return jsonify({
         "status":        "operational",
         "satellites":    6,
         "active":        6,
         "model_trained": swarm is not None,
-        "uptime_hours":  round(random.uniform(120, 9999), 1),
+        "patent_engine": get_patent_engine() is not None,
         "server_time":   datetime.utcnow().isoformat(),
         "coverage_pct":  round(random.uniform(87, 99), 1),
     })
@@ -110,166 +110,358 @@ def status():
 
 @app.route("/api/satellites")
 def satellites():
-    """Return live simulated satellite positions."""
     sats = []
     inclinations = [53, 97.6, 45, 70, 53, 97.6]
     altitudes    = [450, 620, 510, 780, 430, 680]
-    orbit_types  = ["LEO", "SSO", "LEO", "LEO", "LEO", "SSO"]
-
+    orbit_types  = ["LEO","SSO","LEO","LEO","LEO","SSO"]
     for i in range(6):
-        t             = time.time()
-        orbital_period = 92 * 60
-        angle         = (t % orbital_period) / orbital_period * 2 * math.pi
-        lat_offset    = inclinations[i] * math.sin(angle + i * 1.05)
-        lon_offset    = (t / 60) * (360 / (orbital_period / 60))
-
+        t  = time.time()
+        op = 92 * 60
+        a  = (t % op) / op * 2 * math.pi
         sats.append({
-            "id":              f"SAT-{1001 + i}",
+            "id":              f"SAT-{1001+i}",
             "altitude_km":     altitudes[i],
             "orbit_type":      orbit_types[i],
             "inclination":     inclinations[i],
-            "sensors":         ["optical", "SAR", "thermal", "multispectral"],
+            "sensors":         ["optical","SAR","thermal","multispectral"],
             "status":          "active",
-            "lat":             round((lat_offset) % 180 - 90, 4),
-            "lon":             round((lon_offset + i * 60) % 360 - 180, 4),
-            "coverage_km":     random.randint(200, 600),
-            "signal_strength": round(random.uniform(88, 100), 1),
-            "battery_pct":     round(random.uniform(70, 100), 1),
+            "lat":             round((inclinations[i]*math.sin(a+i*1.05))%180-90, 4),
+            "lon":             round((t/60*(360/(op/60))+i*60)%360-180, 4),
+            "signal_strength": round(random.uniform(88,100), 1),
+            "battery_pct":     round(random.uniform(70,100), 1),
         })
     return jsonify(sats)
 
 
 @app.route("/api/predict", methods=["POST"])
 def predict():
-    """
-    Predict disaster risk from satellite feature inputs.
-
-    Required JSON body fields:
-      ndvi, ndwi, lst, swir, nir, precip, wind_speed,
-      humidity, soil_moist, sst_anom, elevation, slope,
-      seismic_v, cloud_cov
-    """
     data = request.get_json()
     if not data:
-        return jsonify({"error": "No JSON body provided"}), 400
-
-    required = [
-        "ndvi", "ndwi", "lst", "swir", "nir", "precip",
-        "wind_speed", "humidity", "soil_moist", "sst_anom",
-        "elevation", "slope", "seismic_v", "cloud_cov"
-    ]
+        return jsonify({"error": "No JSON body"}), 400
+    required = ["ndvi","ndwi","lst","swir","nir","precip","wind_speed",
+                "humidity","soil_moist","sst_anom","elevation","slope",
+                "seismic_v","cloud_cov"]
     missing = [k for k in required if k not in data]
     if missing:
-        return jsonify({"error": f"Missing features: {missing}"}), 400
-
+        return jsonify({"error": f"Missing: {missing}"}), 400
     swarm = get_swarm()
-    if swarm is None:
-        return jsonify({"error": "AI model not available. Try again in a few seconds."}), 503
-
-    try:
-        result = swarm.predictor.predict(data)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if not swarm:
+        return jsonify({"error": "Model unavailable"}), 503
+    return jsonify(swarm.predictor.predict(data))
 
 
 @app.route("/api/scan")
 def scan():
-    """Trigger a global scan of n random regions."""
-    n = int(request.args.get("n", 12))
-    n = min(n, 50)  # cap at 50 to prevent abuse
-
+    n     = min(int(request.args.get("n", 12)), 50)
     swarm = get_swarm()
-    if swarm is None:
-        return jsonify({"error": "AI model not available."}), 503
-
-    try:
-        results = swarm.run_global_scan(n_regions=n)
-        for r in results:
-            _store_alert(r)
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if not swarm:
+        return jsonify({"error": "Model unavailable"}), 503
+    results = swarm.run_global_scan(n_regions=n)
+    for r in results:
+        _store_alert(r)
+    return jsonify(results)
 
 
 @app.route("/api/region/<float:lat>/<float:lon>")
 def scan_region(lat, lon):
-    """Scan a specific lat/lon region."""
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+    if not (-90<=lat<=90 and -180<=lon<=180):
         return jsonify({"error": "Invalid coordinates"}), 400
-
     swarm = get_swarm()
-    if swarm is None:
-        return jsonify({"error": "AI model not available."}), 503
-
-    try:
-        result = swarm.scan_region(lat, lon)
-        _store_alert(result)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if not swarm:
+        return jsonify({"error": "Model unavailable"}), 503
+    result = swarm.scan_region(lat, lon)
+    _store_alert(result)
+    return jsonify(result)
 
 
 @app.route("/api/alerts")
 def alerts():
-    """Return recent alert history with optional filters."""
     limit    = int(request.args.get("limit", 20))
     severity = request.args.get("severity")
     dtype    = request.args.get("type")
-
     filtered = list(reversed(_alert_history))
-    if severity:
-        filtered = [a for a in filtered if a["severity"] == severity]
-    if dtype:
-        filtered = [a for a in filtered if a["type"].lower() == dtype.lower()]
-
+    if severity: filtered = [a for a in filtered if a["severity"]==severity]
+    if dtype:    filtered = [a for a in filtered if a["type"].lower()==dtype.lower()]
     return jsonify(filtered[:limit])
 
 
 @app.route("/api/stats")
 def stats():
-    """Return prediction statistics."""
-    total    = len(_alert_history)
-    by_type  = {}
-    by_sev   = {}
-
+    total   = len(_alert_history)
+    by_type = {}
+    by_sev  = {}
     for a in _alert_history:
         by_type[a["type"]]    = by_type.get(a["type"], 0) + 1
         by_sev[a["severity"]] = by_sev.get(a["severity"], 0) + 1
-
     return jsonify({
         "total_alerts":     total,
         "by_disaster_type": by_type,
         "by_severity":      by_sev,
-        "avg_confidence":   round(
-            sum(a["confidence"] for a in _alert_history) / max(total, 1), 2
-        ),
+        "avg_confidence":   round(sum(a["confidence"] for a in _alert_history)/max(total,1),2),
     })
 
 
 @app.route("/api/history")
 def history():
-    """Return 7-day simulated alert history for charts."""
     rows = []
     now  = datetime.utcnow()
-    for day_offset in range(7):
-        d = now - timedelta(days=6 - day_offset)
+    for d in range(7):
+        dt = now - timedelta(days=6-d)
         rows.append({
-            "date":        d.strftime("%b %d"),
-            "floods":      random.randint(2, 18),
-            "wildfires":   random.randint(1, 12),
-            "cyclones":    random.randint(0, 6),
-            "earthquakes": random.randint(0, 4),
-            "droughts":    random.randint(1, 8),
+            "date":        dt.strftime("%b %d"),
+            "floods":      random.randint(2,18),
+            "wildfires":   random.randint(1,12),
+            "cyclones":    random.randint(0,6),
+            "earthquakes": random.randint(0,4),
+            "droughts":    random.randint(1,8),
         })
     return jsonify(rows)
 
 
-# ── Main ───────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# PATENT CLAIM ROUTES
+# ════════════════════════════════════════════════════════════════
+
+@app.route("/api/cascade", methods=["POST"])
+def cascade():
+    """
+    PATENT CLAIM 1 — Cascade Disaster Prediction
+    
+    POST body:
+      {
+        "primary_disaster": "Drought",
+        "confidence": 88.5,
+        "features": { ndvi, ndwi, lst, ... }
+      }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+
+    primary    = data.get("primary_disaster")
+    confidence = data.get("confidence", 70.0)
+    features   = data.get("features", {})
+
+    if not primary:
+        return jsonify({"error": "primary_disaster is required"}), 400
+
+    engine = get_patent_engine()
+    if not engine:
+        return jsonify({"error": "Patent engine unavailable"}), 503
+
+    try:
+        cascades = engine.cascade_engine.predict_cascades(
+            primary, features, confidence
+        )
+        return jsonify({
+            "claim":            "1 - Cascade Disaster Prediction",
+            "primary_disaster": primary,
+            "primary_confidence": confidence,
+            "cascade_predictions": [
+                {
+                    "triggered_disaster":  c.triggered_disaster,
+                    "cascade_probability": c.cascade_probability,
+                    "combined_severity":   c.combined_severity,
+                    "estimated_delay_hrs": c.estimated_delay_hrs,
+                    "amplifier_features":  c.amplifier_features,
+                }
+                for c in cascades
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tewi", methods=["POST"])
+def tewi():
+    """
+    PATENT CLAIM 2 — Temporal Early Warning Index
+    
+    POST body:
+      {
+        "time_series": [ {feature_dict_t0}, {feature_dict_t1}, ... ],
+        "window_hours": 72
+      }
+      OR provide base features + disaster_type to auto-generate series:
+      {
+        "features": { ndvi, ndwi, ... },
+        "disaster_type": "Wildfire",
+        "auto_generate": true
+      }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+
+    engine = get_patent_engine()
+    if not engine:
+        return jsonify({"error": "Patent engine unavailable"}), 503
+
+    try:
+        time_series = data.get("time_series")
+
+        # auto-generate a demonstration time series
+        if not time_series and data.get("auto_generate"):
+            features     = data.get("features", {})
+            disaster_type= data.get("disaster_type", "Wildfire")
+            time_series  = engine.tewi_engine.generate_synthetic_timeseries(
+                features, disaster_type, hours=72, readings=12
+            )
+
+        if not time_series or len(time_series) < 2:
+            return jsonify({"error": "time_series with >=2 readings required"}), 400
+
+        window  = int(data.get("window_hours", 72))
+        results = engine.tewi_engine.compute_tewi(time_series, window)
+
+        return jsonify({
+            "claim":        "2 - Temporal Early Warning Index (TEWI)",
+            "window_hours": window,
+            "readings_used":len(time_series),
+            "early_warnings": [
+                {
+                    "disaster_type":   r.disaster_type,
+                    "tewi_score":      r.tewi_score,
+                    "warning_level":   r.warning_level,
+                    "hours_to_onset":  r.hours_to_onset,
+                    "trend_direction": r.trend_direction,
+                    "key_indicators":  r.key_indicators,
+                    "confidence":      r.confidence,
+                }
+                for r in results
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dspr", methods=["POST"])
+def dspr():
+    """
+    PATENT CLAIM 3 — Dynamic Swarm Priority Reassignment
+    
+    POST body:
+      {
+        "candidate_regions": [ [lat, lon], [lat, lon], ... ],
+        "active_alerts": [ {type, lat, lon, confidence}, ... ]
+      }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+
+    engine = get_patent_engine()
+    if not engine:
+        return jsonify({"error": "Patent engine unavailable"}), 503
+
+    try:
+        regions       = data.get("candidate_regions", [])
+        active_alerts = data.get("active_alerts", _alert_history[-10:])
+
+        # if no regions provided, generate 12 random global regions
+        if not regions:
+            regions = [
+                [random.uniform(-65,65), random.uniform(-175,175)]
+                for _ in range(12)
+            ]
+
+        features_map = {
+            engine.dspr_engine._region_key(r[0], r[1]): {}
+            for r in regions
+        }
+
+        assignments = engine.dspr_engine.assign_satellites(
+            [(r[0],r[1]) for r in regions],
+            features_map,
+            active_alerts
+        )
+        coverage = engine.dspr_engine.get_coverage_report(assignments)
+
+        return jsonify({
+            "claim":           "3 - Dynamic Swarm Priority Reassignment (DSPR)",
+            "n_satellites":    6,
+            "n_regions_scored":len(regions),
+            "assignments": [
+                {
+                    "satellite_id":          a.satellite_id,
+                    "target_lat":            a.target_lat,
+                    "target_lon":            a.target_lon,
+                    "priority_score":        a.priority_score,
+                    "reason":                a.reason,
+                    "cascade_risk":          a.cascade_risk,
+                    "population_factor":     a.population_factor,
+                    "scan_time_min":         a.estimated_scan_time_min,
+                }
+                for a in assignments
+            ],
+            "coverage_report": coverage,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/patent/analysis", methods=["POST"])
+def patent_analysis():
+    """
+    UNIFIED — All 3 patent claims in a single API call.
+    
+    POST body:
+      {
+        "lat": 37.0,
+        "lon": -120.0,
+        "features": { ndvi, ndwi, lst, ... },
+        "primary_prediction": "Drought",
+        "primary_confidence": 88.5,
+        "auto_generate_tewi": true
+      }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+
+    engine = get_patent_engine()
+    if not engine:
+        return jsonify({"error": "Patent engine unavailable"}), 503
+
+    try:
+        lat        = float(data.get("lat", 0))
+        lon        = float(data.get("lon", 0))
+        features   = data.get("features", {})
+        primary    = data.get("primary_prediction", "No Threat")
+        confidence = float(data.get("primary_confidence", 70))
+
+        # auto-generate time series if requested
+        time_series = data.get("time_series")
+        if not time_series and data.get("auto_generate_tewi") and primary != "No Threat":
+            time_series = engine.tewi_engine.generate_synthetic_timeseries(
+                features, primary, hours=72, readings=12
+            )
+
+        result = engine.full_analysis(
+            lat=lat, lon=lon, features=features,
+            time_series=time_series,
+            primary_prediction=primary,
+            primary_confidence=confidence,
+            active_alerts=_alert_history[-10:]
+        )
+        result["claim_summary"] = {
+            "claim_1_cascades_detected": len(result["claim_1_cascade"]),
+            "claim_2_warnings_detected": len(result["claim_2_tewi"]),
+            "claim_3_satellites_assigned": len(
+                result["claim_3_dspr"]["assignments"]
+                if result["claim_3_dspr"] else []
+            ),
+        }
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Main ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("🛰️  ORION AI Satellite Swarm API starting...")
-    print("   Local URL: http://localhost:5000")
-    print("   API docs:  http://localhost:5000/")
-    # Read PORT from environment (Render sets this automatically)
+    print("🛰️  ORION API (Patent Edition) starting...")
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
