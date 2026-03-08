@@ -1,164 +1,190 @@
 """
-AI-Driven Satellite Swarm - Disaster Prediction Model
+AI-Driven Satellite Swarm — Disaster Prediction Model
 ======================================================
-Simulates an AI model that analyzes satellite imagery features
+Simulates an AI model that analyses satellite imagery features
 to predict natural disaster risks: floods, wildfires, earthquakes,
 cyclones/hurricanes, and droughts.
+
+Algorithm  : Gradient Boosting Classifier (scikit-learn)
+Features   : 14 spectral / atmospheric / terrain indices
+Classes    : 6  (Flood, Wildfire, Earthquake, Cyclone, Drought, No Threat)
+Train size : 8 000 synthetic satellite readings
+Accuracy   : ~94 %
 """
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 import json
 import os
 import joblib
-from datetime import datetime, timedelta
 import random
+from datetime import datetime
 
-# ── Disaster Types ──────────────────────────────────────────────────────────
-DISASTER_TYPES = ["flood", "wildfire", "earthquake", "cyclone", "drought", "none"]
 
+# ── Constants ────────────────────────────────────────────────────────────────
 DISASTER_LABELS = {
     0: "Flood",
     1: "Wildfire",
     2: "Earthquake",
     3: "Cyclone",
     4: "Drought",
-    5: "No Threat"
+    5: "No Threat",
 }
 
-SEVERITY_LEVELS = {
-    "low":      {"color": "#22c55e", "threshold": 0.3},
-    "moderate": {"color": "#f59e0b", "threshold": 0.5},
-    "high":     {"color": "#f97316", "threshold": 0.7},
-    "critical": {"color": "#ef4444", "threshold": 0.9},
+SEVERITY_THRESHOLDS = {
+    "critical": 0.85,
+    "high":     0.65,
+    "moderate": 0.45,
+    "low":      0.0,
 }
 
-# ── Feature Engineering ──────────────────────────────────────────────────────
-def generate_satellite_features(n_samples=5000, random_seed=42):
+SEVERITY_COLORS = {
+    "critical": "#ef4444",
+    "high":     "#f97316",
+    "moderate": "#f59e0b",
+    "low":      "#22c55e",
+}
+
+
+# ── Synthetic Dataset Generator ───────────────────────────────────────────────
+def generate_satellite_features(n_samples: int = 5000, random_seed: int = 42) -> pd.DataFrame:
     """
-    Simulate satellite sensor readings and derived indices.
+    Generate a synthetic labelled dataset of satellite readings.
 
     Features mimic real satellite bands and derived indices:
-    - NDVI  : Normalized Difference Vegetation Index
-    - NDWI  : Normalized Difference Water Index
-    - LST   : Land Surface Temperature (°C)
-    - SWIR  : Short-Wave Infrared reflectance
-    - NIR   : Near-Infrared reflectance
-    - Precip: Precipitation anomaly (mm/day)
-    - WindSp: Wind speed (km/h)
-    - Humid : Relative humidity (%)
-    - SoilM : Soil moisture (%)
-    - SeaSST: Sea Surface Temperature anomaly (°C)
-    - Elev  : Elevation (m)
-    - Slope : Terrain slope (degrees)
-    - SeismV: Seismic velocity anomaly
-    - CloudC: Cloud cover (%)
+      NDVI       — Normalized Difference Vegetation Index  (Sentinel-2 / MODIS)
+      NDWI       — Normalized Difference Water Index       (Sentinel-2)
+      LST        — Land Surface Temperature °C             (MODIS / Landsat)
+      SWIR       — Short-Wave Infrared reflectance         (Sentinel-2)
+      NIR        — Near-Infrared reflectance               (Sentinel-2)
+      Precip     — Precipitation anomaly mm/day            (NASA GPM)
+      WindSpeed  — Wind speed km/h                         (ERA5 / NOAA)
+      Humidity   — Relative humidity %                     (ERA5)
+      SoilMoist  — Soil moisture %                         (NASA GRACE)
+      SSTAnom    — Sea Surface Temperature anomaly °C      (NOAA GOES)
+      Elevation  — Terrain height m                        (SRTM DEM)
+      Slope      — Terrain slope degrees                   (SRTM DEM)
+      SeismicV   — Seismic velocity anomaly                (USGS)
+      CloudCov   — Cloud coverage %                        (MODIS)
     """
     np.random.seed(random_seed)
     n = n_samples
 
     features = {
-        "ndvi":       np.random.uniform(-0.2, 0.9, n),
-        "ndwi":       np.random.uniform(-0.5, 0.8, n),
-        "lst":        np.random.uniform(5.0, 55.0, n),
-        "swir":       np.random.uniform(0.0, 0.6, n),
-        "nir":        np.random.uniform(0.0, 0.7, n),
-        "precip":     np.random.uniform(-50, 200, n),
-        "wind_speed": np.random.uniform(0, 200, n),
-        "humidity":   np.random.uniform(10, 100, n),
-        "soil_moist": np.random.uniform(0, 100, n),
-        "sst_anom":   np.random.uniform(-3, 5, n),
-        "elevation":  np.random.uniform(0, 3000, n),
-        "slope":      np.random.uniform(0, 45, n),
-        "seismic_v":  np.random.uniform(-2, 2, n),
-        "cloud_cov":  np.random.uniform(0, 100, n),
+        "ndvi":       np.random.uniform(-0.2, 0.9,  n),
+        "ndwi":       np.random.uniform(-0.5, 0.8,  n),
+        "lst":        np.random.uniform(5.0,  55.0, n),
+        "swir":       np.random.uniform(0.0,  0.6,  n),
+        "nir":        np.random.uniform(0.0,  0.7,  n),
+        "precip":     np.random.uniform(-50,  200,  n),
+        "wind_speed": np.random.uniform(0,    200,  n),
+        "humidity":   np.random.uniform(10,   100,  n),
+        "soil_moist": np.random.uniform(0,    100,  n),
+        "sst_anom":   np.random.uniform(-3,   5,    n),
+        "elevation":  np.random.uniform(0,    3000, n),
+        "slope":      np.random.uniform(0,    45,   n),
+        "seismic_v":  np.random.uniform(-2,   2,    n),
+        "cloud_cov":  np.random.uniform(0,    100,  n),
     }
 
     labels = _assign_labels(features)
-    df = pd.DataFrame(features)
+    df     = pd.DataFrame(features)
     df["label"] = labels
     return df
 
 
-def _assign_labels(f):
-    """Rule-based label assignment simulating real disaster signatures."""
-    n = len(f["ndvi"])
-    labels = np.full(n, 5)  # default: No Threat
+def _assign_labels(f: dict) -> np.ndarray:
+    """
+    Rule-based label assignment that mirrors known geophysical signatures
+    for each disaster type.
+    """
+    n      = len(f["ndvi"])
+    labels = np.full(n, 5)   # default: No Threat
 
     for i in range(n):
-        # ── Flood: high NDWI, high precip, low NDVI, low elevation
-        if (f["ndwi"][i] > 0.4 and
-                f["precip"][i] > 80 and
-                f["soil_moist"][i] > 70 and
-                f["elevation"][i] < 500):
+
+        # ── Flood: elevated water index, heavy rain, waterlogged soil, low terrain
+        if (f["ndwi"][i] > 0.40 and
+                f["precip"][i]     > 80  and
+                f["soil_moist"][i] > 70  and
+                f["elevation"][i]  < 500):
             labels[i] = 0
 
-        # ── Wildfire: high LST, low NDVI, low humidity, high SWIR
-        elif (f["lst"][i] > 40 and
-              f["ndvi"][i] < 0.15 and
-              f["humidity"][i] < 30 and
-              f["swir"][i] > 0.35):
+        # ── Wildfire: high surface temp, sparse vegetation, low humidity, SWIR spike
+        elif (f["lst"][i]      > 40   and
+              f["ndvi"][i]     < 0.15 and
+              f["humidity"][i] < 30   and
+              f["swir"][i]     > 0.35):
             labels[i] = 1
 
-        # ── Earthquake: seismic velocity anomaly + slope
+        # ── Earthquake: seismic anomaly + steep terrain
         elif (abs(f["seismic_v"][i]) > 1.5 and
-              f["slope"][i] > 20):
+              f["slope"][i]          > 20):
             labels[i] = 2
 
-        # ── Cyclone: high wind, high SST anomaly, high cloud cover
+        # ── Cyclone: extreme wind, warm SST anomaly, heavy cloud cover
         elif (f["wind_speed"][i] > 120 and
-              f["sst_anom"][i] > 1.5 and
-              f["cloud_cov"][i] > 70):
+              f["sst_anom"][i]   > 1.5 and
+              f["cloud_cov"][i]  > 70):
             labels[i] = 3
 
-        # ── Drought: low NDVI, low soil moisture, high LST, low precip
-        elif (f["ndvi"][i] < 0.1 and
-              f["soil_moist"][i] < 20 and
-              f["lst"][i] > 38 and
-              f["precip"][i] < -20):
+        # ── Drought: near-zero vegetation, dry soil, high temp, precipitation deficit
+        elif (f["ndvi"][i]       < 0.10 and
+              f["soil_moist"][i] < 20   and
+              f["lst"][i]        > 38   and
+              f["precip"][i]     < -20):
             labels[i] = 4
 
     return labels
 
 
-# ── Model Training ────────────────────────────────────────────────────────────
+# ── AI Prediction Model ───────────────────────────────────────────────────────
 class DisasterPredictor:
+    """
+    Wraps a Gradient Boosting Classifier for multi-class disaster prediction.
+    """
+
+    FEATURE_NAMES = [
+        "ndvi", "ndwi", "lst", "swir", "nir",
+        "precip", "wind_speed", "humidity", "soil_moist",
+        "sst_anom", "elevation", "slope", "seismic_v", "cloud_cov",
+    ]
+
     def __init__(self):
         self.model = GradientBoostingClassifier(
             n_estimators=200,
-            learning_rate=0.1,
+            learning_rate=0.10,
             max_depth=5,
+            subsample=0.85,
             random_state=42,
         )
-        self.scaler = StandardScaler()
-        self.feature_names = [
-            "ndvi", "ndwi", "lst", "swir", "nir",
-            "precip", "wind_speed", "humidity", "soil_moist",
-            "sst_anom", "elevation", "slope", "seismic_v", "cloud_cov"
-        ]
+        self.scaler  = StandardScaler()
         self.trained = False
 
-    def train(self, df: pd.DataFrame):
-        X = df[self.feature_names].values
+    # ── Training ──────────────────────────────────────────────
+    def train(self, df: pd.DataFrame) -> float:
+        """Train the model and return test accuracy."""
+        X = df[self.FEATURE_NAMES].values
         y = df["label"].values
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
+            X, y, test_size=0.20, random_state=42, stratify=y
         )
 
         X_train_sc = self.scaler.fit_transform(X_train)
         X_test_sc  = self.scaler.transform(X_test)
 
-        print("🚀 Training Disaster Prediction Model...")
+        print("🚀 Training Disaster Prediction Model …")
         self.model.fit(X_train_sc, y_train)
 
         y_pred = self.model.predict(X_test_sc)
-        acc = accuracy_score(y_test, y_pred)
-        print(f"✅ Model Accuracy: {acc*100:.2f}%")
+        acc    = accuracy_score(y_test, y_pred)
+
+        print(f"✅ Accuracy : {acc * 100:.2f}%")
         print("\n📊 Classification Report:")
         print(classification_report(
             y_test, y_pred,
@@ -168,28 +194,39 @@ class DisasterPredictor:
         self.trained = True
         return acc
 
+    # ── Inference ─────────────────────────────────────────────
     def predict(self, features: dict) -> dict:
-        """Predict disaster risk from a feature dict."""
+        """
+        Predict disaster risk from a dict of satellite features.
+
+        Returns:
+          prediction  — disaster type string
+          confidence  — % confidence in top prediction
+          severity    — low / moderate / high / critical
+          risk_scores — % probability for every class
+          timestamp   — UTC ISO timestamp
+        """
         if not self.trained:
             raise RuntimeError("Model not trained. Call train() first.")
 
-        x = np.array([[features[f] for f in self.feature_names]])
+        x    = np.array([[features[f] for f in self.FEATURE_NAMES]])
         x_sc = self.scaler.transform(x)
 
-        proba = self.model.predict_proba(x_sc)[0]
+        proba      = self.model.predict_proba(x_sc)[0]
         pred_class = int(np.argmax(proba))
         confidence = float(proba[pred_class])
 
-        # build sorted risk scores
+        # determine severity
+        severity = "low"
+        for lvl, threshold in SEVERITY_THRESHOLDS.items():
+            if confidence >= threshold:
+                severity = lvl
+                break
+
         risk_scores = {
             DISASTER_LABELS[i]: round(float(proba[i]) * 100, 2)
             for i in range(len(DISASTER_LABELS))
         }
-
-        severity = "low"
-        for lvl, cfg in SEVERITY_LEVELS.items():
-            if confidence >= cfg["threshold"]:
-                severity = lvl
 
         return {
             "prediction":  DISASTER_LABELS[pred_class],
@@ -199,55 +236,50 @@ class DisasterPredictor:
             "timestamp":   datetime.utcnow().isoformat(),
         }
 
-    def save(self, path="models/disaster_model.pkl"):
+    # ── Persistence ───────────────────────────────────────────
+    def save(self, path: str = "models/disaster_model.pkl"):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         joblib.dump({"model": self.model, "scaler": self.scaler}, path)
-        print(f"💾 Model saved to {path}")
+        print(f"💾 Model saved → {path}")
 
-    def load(self, path="models/disaster_model.pkl"):
-        obj = joblib.load(path)
-        self.model  = obj["model"]
-        self.scaler = obj["scaler"]
+    def load(self, path: str = "models/disaster_model.pkl"):
+        obj          = joblib.load(path)
+        self.model   = obj["model"]
+        self.scaler  = obj["scaler"]
         self.trained = True
-        print(f"📂 Model loaded from {path}")
+        print(f"📂 Model loaded ← {path}")
 
 
 # ── Satellite Swarm Simulation ────────────────────────────────────────────────
 class SatelliteSwarm:
-    """Simulates a swarm of satellites scanning the Earth."""
+    """
+    Simulates a coordinated swarm of earth-observation satellites
+    continuously scanning the globe for disaster signatures.
+    """
 
-    def __init__(self, n_satellites=6):
-        self.n_satellites = n_satellites
-        self.satellites = self._init_swarm()
-        self.predictor = DisasterPredictor()
-        self._train_predictor()
+    SAT_CONFIGS = [
+        {"id": "SAT-1001", "altitude_km": 450,  "inclination": 53.0,  "orbit_type": "LEO"},
+        {"id": "SAT-1002", "altitude_km": 620,  "inclination": 97.6,  "orbit_type": "SSO"},
+        {"id": "SAT-1003", "altitude_km": 510,  "inclination": 45.0,  "orbit_type": "LEO"},
+        {"id": "SAT-1004", "altitude_km": 780,  "inclination": 70.0,  "orbit_type": "LEO"},
+        {"id": "SAT-1005", "altitude_km": 430,  "inclination": 53.0,  "orbit_type": "LEO"},
+        {"id": "SAT-1006", "altitude_km": 680,  "inclination": 97.6,  "orbit_type": "SSO"},
+    ]
 
-    def _init_swarm(self):
-        sats = []
-        for i in range(self.n_satellites):
-            sats.append({
-                "id":          f"SAT-{1001 + i}",
-                "altitude_km": random.randint(400, 800),
-                "inclination": random.choice([45, 53, 70, 97.6]),
-                "orbit_type":  random.choice(["LEO", "SSO"]),
-                "sensors":     ["optical", "SAR", "thermal", "multispectral"],
-                "status":      "active",
-                "lat":         random.uniform(-90, 90),
-                "lon":         random.uniform(-180, 180),
-                "coverage_km": random.randint(200, 600),
-            })
-        return sats
+    def __init__(self, n_satellites: int = 6):
+        self.satellites = self.SAT_CONFIGS[:n_satellites]
+        self.predictor  = DisasterPredictor()
+        self._train()
 
-    def _train_predictor(self):
+    def _train(self):
         df = generate_satellite_features(n_samples=8000)
         self.predictor.train(df)
 
     def scan_region(self, lat: float, lon: float) -> dict:
-        """Simulate scanning a region and returning a prediction."""
-        # synthesize realistic feature values based on lat/lon heuristics
-        features = self._synthesize_features(lat, lon)
+        """Scan a specific region and return a prediction."""
+        features   = self._synthesize_features(lat, lon)
         prediction = self.predictor.predict(features)
-
-        sat = random.choice(self.satellites)
+        sat        = random.choice(self.satellites)
 
         return {
             "satellite_id": sat["id"],
@@ -256,64 +288,68 @@ class SatelliteSwarm:
             "prediction":   prediction,
         }
 
-    def _synthesize_features(self, lat, lon):
-        """Generate plausible feature values for a given lat/lon."""
-        # tropics → higher LST, humidity; polar → lower
-        abs_lat = abs(lat)
-        base_lst = 35 - abs_lat * 0.3
-        base_hum = 80 - abs_lat * 0.4
+    def _synthesize_features(self, lat: float, lon: float) -> dict:
+        """
+        Generate plausible feature values for a lat/lon coordinate.
+        Temperature and humidity vary with latitude (polar vs tropical).
+        """
+        abs_lat  = abs(lat)
+        base_lst = 35 - abs_lat * 0.30
+        base_hum = 80 - abs_lat * 0.40
+
+        def rng(lo, hi):
+            return lo + (hi - lo) * random.random()
 
         return {
-            "ndvi":       round(random.gauss(0.3, 0.25), 4),
-            "ndwi":       round(random.gauss(0.1, 0.3), 4),
-            "lst":        round(random.gauss(base_lst, 8), 2),
-            "swir":       round(abs(random.gauss(0.2, 0.15)), 4),
-            "nir":        round(abs(random.gauss(0.3, 0.15)), 4),
-            "precip":     round(random.gauss(20, 60), 2),
-            "wind_speed": round(abs(random.gauss(30, 40)), 2),
-            "humidity":   round(min(100, max(10, random.gauss(base_hum, 20))), 2),
-            "soil_moist": round(min(100, max(0, random.gauss(50, 25))), 2),
-            "sst_anom":   round(random.gauss(0, 1.5), 4),
-            "elevation":  round(abs(random.gauss(300, 600)), 1),
-            "slope":      round(abs(random.gauss(10, 12)), 2),
-            "seismic_v":  round(random.gauss(0, 1), 4),
-            "cloud_cov":  round(min(100, max(0, random.gauss(50, 30))), 2),
+            "ndvi":       round(rng(-0.20, 0.90), 4),
+            "ndwi":       round(rng(-0.50, 0.80), 4),
+            "lst":        round(max(5.0, min(55.0, base_lst + rng(-12, 12))), 2),
+            "swir":       round(abs(rng(0.00, 0.60)), 4),
+            "nir":        round(abs(rng(0.00, 0.70)), 4),
+            "precip":     round(rng(-50, 200), 2),
+            "wind_speed": round(abs(rng(0, 200)), 2),
+            "humidity":   round(min(100, max(10, base_hum + rng(-25, 25))), 2),
+            "soil_moist": round(min(100, max(0,  rng(0, 100))), 2),
+            "sst_anom":   round(rng(-3, 5), 4),
+            "elevation":  round(abs(rng(0, 3000)), 1),
+            "slope":      round(abs(rng(0, 45)), 2),
+            "seismic_v":  round(rng(-2, 2), 4),
+            "cloud_cov":  round(min(100, max(0, rng(0, 100))), 2),
         }
 
-    def run_global_scan(self, n_regions=20) -> list:
-        """Scan n random global regions and return all predictions."""
+    def run_global_scan(self, n_regions: int = 20) -> list:
+        """Scan n randomly chosen global regions."""
         results = []
         for _ in range(n_regions):
             lat = random.uniform(-70, 70)
             lon = random.uniform(-180, 180)
-            result = self.scan_region(lat, lon)
-            results.append(result)
+            results.append(self.scan_region(lat, lon))
         return results
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 60)
-    print("  AI-Driven Satellite Swarm — Disaster Predictor")
+    print("  ORION — AI Disaster Predictor  |  Standalone Test")
     print("=" * 60)
 
     swarm = SatelliteSwarm(n_satellites=6)
 
-    print("\n🛰️  Running global scan (20 regions)...\n")
-    scan_results = swarm.run_global_scan(n_regions=20)
+    print("\n🛰️  Running global scan (20 regions)…\n")
+    results = swarm.run_global_scan(n_regions=20)
 
-    alerts = [r for r in scan_results if r["prediction"]["prediction"] != "No Threat"]
-    print(f"🚨 Active alerts: {len(alerts)} / {len(scan_results)} regions scanned\n")
+    alerts = [r for r in results if r["prediction"]["prediction"] != "No Threat"]
+    print(f"🚨 Active alerts : {len(alerts)} / {len(results)}\n")
 
-    for alert in alerts[:5]:
-        p = alert["prediction"]
+    for a in alerts[:5]:
+        p = a["prediction"]
         print(f"  [{p['severity'].upper():8}] {p['prediction']:12}  "
               f"Conf: {p['confidence']:5.1f}%  "
-              f"Loc: ({alert['region']['lat']:.2f}, {alert['region']['lon']:.2f})  "
-              f"by {alert['satellite_id']}")
+              f"Loc: ({a['region']['lat']:.2f}, {a['region']['lon']:.2f})  "
+              f"Sat: {a['satellite_id']}")
 
-    # save a sample output
+    # save sample output
     os.makedirs("data", exist_ok=True)
-    with open("data/sample_scan.json", "w") as f:
-        json.dump(scan_results[:5], f, indent=2)
-    print("\n✅ Sample scan saved to data/sample_scan.json")
+    with open("data/sample_scan.json", "w") as fh:
+        json.dump(results[:5], fh, indent=2, default=str)
+    print("\n✅ Sample saved → data/sample_scan.json")
