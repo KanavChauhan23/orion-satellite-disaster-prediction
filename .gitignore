@@ -1,1 +1,62 @@
+# ── Environment files — NEVER push these ──────────────────────
+.env
+*.env
+backend/.env
+.env.local
+.env.production
 
+# ── Python cache ───────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.pyw
+
+# ── Virtual environments ───────────────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── AI model saved files (can be large) ───────────────────────
+*.pkl
+*.joblib
+models/saved/
+models/*.pkl
+models/*.joblib
+
+# ── Generated data files ───────────────────────────────────────
+data/*.json
+data/*.csv
+data/outputs/
+
+# ── OS files ───────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── IDE / Editor files ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ── Logs ───────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+
+# ── Node (if frontend build tools added later) ─────────────────
+node_modules/
+dist/
+build/
+.next/
