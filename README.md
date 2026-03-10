@@ -1,11 +1,64 @@
 # 🛰 ORION — AI-Driven Satellite Swarm for Autonomous Disaster Prediction
+<div align="center">
 
-**Patent Prototype | College Project | CSE + AI Domain**
+![Status](https://img.shields.io/badge/Status-Prototype-blue?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python)
+![Flask](https://img.shields.io/badge/Flask-API-black?style=flat-square&logo=flask)
+![AI](https://img.shields.io/badge/AI-Scikit--Learn-orange?style=flat-square&logo=scikitlearn)
+![Satellite](https://img.shields.io/badge/Domain-Satellite%20AI-purple?style=flat-square)
+
+**AI-powered satellite swarm system that predicts natural disasters using multi-spectral satellite data and machine learning.**
+
+**Live Demo → [ORION Mission DP](https://orion-satellite-disaster-prediction-77gvxe6l1.vercel.app/)**
+
+</div>
 
 ---
 
-## 🌐 Live Demo
-Open `frontend/index.html` directly in any browser — **no server needed**.
+## 🌍 Project Overview
+
+**ORION** is an AI-based disaster prediction prototype designed to simulate how a swarm of Earth-observation satellites can analyze environmental signals and detect early indicators of natural disasters.
+
+The system integrates **satellite sensor features, atmospheric indicators, and machine learning models** to identify risks of events such as **floods, wildfires, earthquakes, cyclones, and droughts**.
+
+This project demonstrates how **AI + satellite data + autonomous swarm systems** could help governments and disaster response agencies detect threats earlier and improve global disaster preparedness.
+
+---
+
+## ⚡ Key Capabilities
+
+| Feature | Description |
+|-------|-------------|
+| 🛰 **Satellite Swarm Simulation** | Simulates multiple satellites collecting environmental data |
+| 🤖 **AI Disaster Prediction** | Machine learning model predicts disaster type and severity |
+| 🌍 **Mission Control Dashboard** | Interactive interface to monitor satellite activity |
+| 📊 **Environmental Data Analysis** | Processes 14 atmospheric and terrain features |
+| ⚠ **Real-time Alert System** | Generates alerts with confidence scores |
+| 📈 **Risk Monitoring** | Tracks disaster trends and alert history |
+| 🌐 **API-Driven Architecture** | REST API for prediction and satellite data |
+
+---
+
+## 🛠 Tech Stack
+
+### Backend
+- **Python**
+- **Flask** — REST API
+- **Scikit-learn** — Machine learning model
+- **NumPy / Pandas** — Data processing
+
+### Frontend
+- **HTML5**
+- **JavaScript**
+- **Canvas API** — satellite visualization
+- **CSS3** — mission control UI
+
+### AI & Data
+- Gradient Boosting Classifier
+- Synthetic satellite sensor dataset
+- Multi-spectral environmental features
+
 
 ---
 
@@ -191,4 +244,4 @@ Response:
 ---
 
 *Built for patent submission and prototype demonstration.*
-*© 2025 — AI-Driven Satellite Swarm Project*
+*© 2026 — AI-Driven Satellite Swarm Project*
